@@ -17,6 +17,9 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#define BUFFER_SIZE  1024
+#define MIN_BUFFER_SIZE     256
+#define SERVER_STRING "Server: jdbhttpd/0.1.0\r\n"
 
 void error_die(const char *msg) {
     perror(msg);
@@ -46,15 +49,145 @@ int startServer(int sockfd) {
 
 
 }
+int isSpace(char c) {
+    if (c=='\t' || c=='\n' || c == ' ') return 1;
+    return 0;
+
+}
+
+
+void unimplemented(int client)
+{
+    char buf[1024];
+    
+    sprintf(buf, "HTTP/1.0 501 Method Not Implemented\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, SERVER_STRING);
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "Content-Type: text/html\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "<HTML><HEAD><TITLE>Method Not Implemented\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "</TITLE></HEAD>\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "<BODY><P>HTTP request method not supported.\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "</BODY></HTML>\r\n");
+    send(client, buf, strlen(buf), 0);
+}
+
+
+void headers(int client, const char *filename)
+{
+    char buf[1024];
+    (void)filename;  /* could use filename to determine file type */
+    
+    strcpy(buf, "HTTP/1.0 200 OK\r\n");
+    send(client, buf, strlen(buf), 0);
+    strcpy(buf, SERVER_STRING);
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "Content-Type: text/html\r\n");
+    send(client, buf, strlen(buf), 0);
+    strcpy(buf, "\r\n");
+    send(client, buf, strlen(buf), 0);
+}
+
+void cat(int client, FILE *resource)
+{
+    char buf[1024];
+    
+    fgets(buf, sizeof(buf), resource);
+    while (!feof(resource))
+    {
+        send(client, buf, strlen(buf), 0);
+        fgets(buf, sizeof(buf), resource);
+    }
+}
+
+void not_found(int client)
+{
+    char buf[1024];
+    
+    sprintf(buf, "HTTP/1.0 404 NOT FOUND\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, SERVER_STRING);
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "Content-Type: text/html\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "<HTML><TITLE>Not Found</TITLE>\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "<BODY><P>The server could not fulfill\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "your request because the resource specified\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "is unavailable or nonexistent.\r\n");
+    send(client, buf, strlen(buf), 0);
+    sprintf(buf, "</BODY></HTML>\r\n");
+    send(client, buf, strlen(buf), 0);
+}
+
+void file_server(int sockfd, char filepath[]) {
+    FILE *file = NULL;
+    
+    file = fopen(filepath, "r");
+    if(file==NULL) not_found(sockfd);
+    else {
+        headers(sockfd, filepath);
+        cat(sockfd, file);
+    }
+    fclose(file);
+    
+
+}
 
 void connProc(int *sockfd) {
-    char buf[256];
-    int recvlen = -1;
+    char buf[BUFFER_SIZE];
+    int  recvlen = -1;
+    char method[MIN_BUFFER_SIZE ];
+    char url[MIN_BUFFER_SIZE];
+    char path[MIN_BUFFER_SIZE];
+    int  i=0,j=0;
+    int  cgi=0;
     
-    recvlen = recv(*sockfd, buf, 255, 0);
+    recvlen = recv(*sockfd, buf, BUFFER_SIZE-1, 0);
     if (recvlen > 0) {
         printf("%s", buf);
     }
+    
+    while(i<recvlen && isSpace(buf[i])) i++;
+    if (i == recvlen)
+        unimplemented(*sockfd);
+    
+    while(i<recvlen && j<MIN_BUFFER_SIZE && !isSpace(buf[i])) {
+        method[j++] = buf[i++];
+    }
+    if (j<MIN_BUFFER_SIZE && i<recvlen) method[j]='\0';
+    else
+        unimplemented(*sockfd);
+
+    
+    if (strcmp(method, "GET") && strcmp(method, "POST"))
+        unimplemented(*sockfd);
+    
+    if (!strcmp(method, "POST")) cgi=1;
+    
+    while(i<recvlen && isSpace(buf[i])) i++;
+    j=0;
+    while(i<recvlen && j<MIN_BUFFER_SIZE && !isSpace(buf[i])) {
+        url[j++] = buf[i++];
+    }
+    
+    url[j] = '\0';
+    
+    if (!cgi) {
+        file_server(*sockfd, url);
+    }
+        
+    
     
     
     printf("%s", "client proc!");
