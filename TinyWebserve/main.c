@@ -56,7 +56,7 @@ int isSpace(char c) {
 }
 
 
-void unimplemented(int client)
+void unimplemented(int client)   //问题：send什么时候把用户空间缓存里的数据推到内核缓存? 数据量达到多少？ 为什么客户端输入的话send就直接发送了？
 {
     char buf[1024];
     
@@ -132,7 +132,6 @@ void not_found(int client)
 
 void file_server(int sockfd, char filepath[]) {
     FILE *file = NULL;
-    
     file = fopen(filepath, "r");
     if(file==NULL) not_found(sockfd);
     else {
