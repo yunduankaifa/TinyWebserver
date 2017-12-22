@@ -168,8 +168,9 @@ void cgi_server(int sockfd, char filepath[]) {
             }
             close(cgi_pipe[0]);
             waitpid(child_pid, &status, 0);
-            exit(0);
-            
+  
+            printf("%s", "father process ended! \n");
+  
             
         } else {
             //子进程
