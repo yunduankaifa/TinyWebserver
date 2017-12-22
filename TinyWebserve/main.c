@@ -168,6 +168,7 @@ void cgi_server(int sockfd, char filepath[]) {
             }
             close(cgi_pipe[0]);
             waitpid(child_pid, &status, 0);
+            exit(0);
             
             
         } else {
@@ -230,7 +231,8 @@ void connProc(int *sockfd) {
     } else {
         cgi_server(*sockfd, url);
     }
-        
+    
+    close(*sockfd);
     
     
     
