@@ -7,6 +7,7 @@
 //
 
 #include <stdio.h>
+#include <stdint.h>
 #include <sys/socket.h>
 #include <sys/netport.h>
 #include <errno.h>
@@ -143,6 +144,47 @@ void file_server(int sockfd, char filepath[]) {
 
 }
 
+void cgi_server(int sockfd, char filepath[]) {
+    int cgi_pipe[2]={-1,-1};
+    int child_pid=-1;
+    char buf[MIN_BUFFER_SIZE];
+    int status;
+    if(access(filepath, 0)) {
+        not_found(sockfd);
+    } else {
+        if (pipe(cgi_pipe)) {  //管道创建失败
+            
+        }
+        
+        sprintf(buf, "HTTP/1.0 200 OK\r\n");
+        send(sockfd, buf, strlen(buf), 0);
+        if ((child_pid=fork()) < 0) {
+            //创建子进程失败
+        } else if (child_pid > 0) {
+            //父进程
+            close(cgi_pipe[1]);
+            while(read(cgi_pipe[0], buf, MIN_BUFFER_SIZE)) {
+                send(sockfd, buf, sizeof(buf), 0);
+            }
+            close(cgi_pipe[0]);
+            waitpid(child_pid, &status, 0);
+            
+            
+        } else {
+            //子进程
+            dup2(cgi_pipe[1],STDOUT_FILENO);
+            close(cgi_pipe[0]);
+            execl(filepath, NULL);
+            exit(0);
+        }
+        
+    
+    
+    }
+
+
+}
+
 void connProc(int *sockfd) {
     char buf[BUFFER_SIZE];
     int  recvlen = -1;
@@ -181,9 +223,12 @@ void connProc(int *sockfd) {
     }
     
     url[j] = '\0';
+    cgi=1;
     
     if (!cgi) {
         file_server(*sockfd, url);
+    } else {
+        cgi_server(*sockfd, url);
     }
         
     
