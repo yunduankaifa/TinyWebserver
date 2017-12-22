@@ -236,7 +236,7 @@ void connProc(int *sockfd) {
     
     
     
-    printf("%s", "client proc!");
+   // printf("%s", "client proc!");
 
 }
 
