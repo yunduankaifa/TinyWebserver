@@ -35,7 +35,7 @@ int startServer(int sockfd) {
     
     serveraddr.sin_family        = AF_INET;
     serveraddr.sin_port          = htons(8801);
-    serveraddr.sin_addr.s_addr   = inet_addr("10.211.55.2");
+    serveraddr.sin_addr.s_addr   = inet_addr("10.211.55.4");
 
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
         error_die("setsock failed");
