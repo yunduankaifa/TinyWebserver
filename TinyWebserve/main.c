@@ -35,7 +35,7 @@ int startServer(int sockfd) {
     
     serveraddr.sin_family        = AF_INET;
     serveraddr.sin_port          = htons(8801);
-    serveraddr.sin_addr.s_addr   = inet_addr("127.0.0.1");
+    serveraddr.sin_addr.s_addr   = inet_addr("10.211.55.2");
 
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
         error_die("setsock failed");
@@ -175,6 +175,8 @@ void cgi_server(int sockfd, char filepath[]) {
         } else {
             //子进程
             dup2(cgi_pipe[1],STDOUT_FILENO);
+            sprintf(buf, "QUERY_STRING=%s", filepath);
+            putenv(buf);
             close(cgi_pipe[0]);
             execl(filepath, NULL);
             exit(0);
