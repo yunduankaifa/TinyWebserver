@@ -18,13 +18,14 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-#define BUFFER_SIZE  1024
+#define BUFFER_SIZE         1024
 #define MIN_BUFFER_SIZE     256
-#define SERVER_STRING "Server: jdbhttpd/0.1.0\r\n"
+#define DEFAULT_PORT        8801
+#define SERVER_STRING "Server: jtinywebserver/0.1.0\r\n"
 
 void error_die(const char*);
 int build_response(int, int);
-int startServer();
+int startServer(int);
 int isSpace(char);
 void headers(int, const char *);
 void cat(int, FILE *);
@@ -64,7 +65,7 @@ void error_die(const char *msg) {
 }
 
 
-int startServer() {
+int startServer(int port) {
     struct sockaddr_in serveraddr;
     int serverSock=-1;
     int on=1;
@@ -79,8 +80,7 @@ int startServer() {
     memset(&serveraddr, 0, sizeof(struct sockaddr_in));
     
     serveraddr.sin_family        = AF_INET;
-    serveraddr.sin_port          = htons(8801);
- //   serveraddr.sin_addr.s_addr   = inet_addr(INADDR_ANY);
+    serveraddr.sin_port          = htons(port);
     serveraddr.sin_addr.s_addr   = htonl(INADDR_ANY);
     if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
         error_die("setsock failed");
@@ -171,9 +171,6 @@ void cgi_server(int client, const char *filepath) {
             }
             close(cgi_pipe[0]);
             waitpid(child_pid, &status, 0);
-  
-            printf("%s", "father process ended! \n");
-  
             
         } else {
             //子进程
@@ -248,9 +245,14 @@ int main(int argc, const char * argv[]) {
     int cliendaddrLen;
     pthread_t pid;
     struct sockaddr_in clientaddr;
+    int port = DEFAULT_PORT;
+    
+    if (argv[1]) {
+        port = (atof(argv[1])>0)?atof(argv[1]):port;
+    }
     
     
-    if ((serverSock=startServer()) < 0)
+    if ((serverSock=startServer(port)) < 0)
         error_die("start server failed!");
     
     
