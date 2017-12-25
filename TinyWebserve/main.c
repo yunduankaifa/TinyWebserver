@@ -24,7 +24,7 @@
 
 void error_die(const char *);
 int build_response(int, int);
-int startServer(int);
+int startServer();
 int isSpace(char);
 void headers(int, const char *);
 void cat(int, FILE *);
@@ -64,7 +64,7 @@ void error_die(const char *msg) {
 }
 
 
-int startServer(int sockfd) {
+int startServer() {
     struct sockaddr_in serveraddr;
     int serverSock=-1;
     int on=1;
@@ -242,29 +242,28 @@ void connProc(int client) {
 
 
 int main(int argc, const char * argv[]) {
-    int listensock=0;
-    int acceptsock;
-    int cliendaddr_len;
+    int serverSock=0;
+    int acceptSock;
+    int cliendaddrLen;
     pthread_t pid;
     struct sockaddr_in clientaddr;
     
-    listensock = socket(AF_INET, SOCK_STREAM, 0);
     
-    if (startServer(listensock) < 0)
+    if ((serverSock=startServer()) < 0)
         error_die("start server failed!");
     
     
     
     while(1) {
-        acceptsock = accept(listensock, (struct sockaddr*)&clientaddr, (socklen_t*)&cliendaddr_len);
-        if (acceptsock < 0) {
+        acceptSock = accept(serverSock, (struct sockaddr*)&clientaddr, (socklen_t*)&cliendaddrLen);
+        if (acceptSock < 0) {
             perror("accept client failed\n");
             continue;
         }
         
-        if (pthread_create(&pid, NULL, (void *)&connProc, (void *)&acceptsock) != 0 ) {
+        if (pthread_create(&pid, NULL, (void *)&connProc, (void *)&acceptSock) != 0 ) {
             perror("client conn failed\n");
-            close(acceptsock);
+            close(acceptSock);
             continue;
         }
 
