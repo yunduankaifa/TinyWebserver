@@ -9,7 +9,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/socket.h>
-//#include <sys/netport.h>
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -17,10 +16,47 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/types.h>
 
 #define BUFFER_SIZE  1024
 #define MIN_BUFFER_SIZE     256
 #define SERVER_STRING "Server: jdbhttpd/0.1.0\r\n"
+
+void error_die(const char *);
+int build_response(int, int);
+int startServer(int);
+int isSpace(char);
+void headers(int, const char *);
+void cat(int, FILE *);
+void file_server(int, const char *);
+void cgi_server(int, const char *);
+void connProc(int);
+
+struct httpResPck {
+    int  stateNo;
+    char *resContent;
+};
+
+struct httpResPck resTable[] = {
+    {400, "HTTP/1.0 400 Bad Request\r\nServer: tinywebserver/0.1.0\r\nContent-Type: text/html\r\n\r\n<HTML><TITLE>Bad Request</TITLE>\r\n<BODY><P>The request has wrong, please fix it and try again.\r\n</BODY></HTML>\r\n"},
+    {404, "HTTP/1.0 404 NOT FOUND\r\nServer: tinywebserver/0.1.0\r\nContent-Type: text/html\r\n\r\n<HTML><TITLE>Not Found</TITLE>\r\n<BODY><P>The server could not fulfill\r\nyour request because the resource specified\r\nis unavailable or nonexistent.\r\n</BODY></HTML>\r\n"},
+    {500, "HTTP/1.0 500 Internal Server Error\r\nServer: tinywebserver/0.1.0\r\nContent-Type: text/html\r\n\r\n<HTML><HEAD><TITLE>Internal Server Error\r\n</TITLE></HEAD>\r\n<BODY><P>Internal Server Error.\r\n</BODY></HTML>\r\n"},
+    {501, "HTTP/1.0 501 Method Not Implemented\r\nServer: tinywebserver/0.1.0\r\nContent-Type: text/html\r\n\r\n<HTML><HEAD><TITLE>Method Not Implemented\r\n</TITLE></HEAD>\r\n<BODY><P>HTTP request method not supported.\r\n</BODY></HTML>\r\n"},
+};
+
+//根据状态码state_no构建和传送响应包给client。当返回状态是200时，只构建响应包的首行
+int build_response(int state_no, int client) {
+    int i;
+    int resTypeCnt = (sizeof(resTable)/sizeof(struct httpResPck));
+    for (i=0; i<resTypeCnt; i++) {
+        if (resTable[i].stateNo == state_no) {
+            send(client, resTable[i].resContent, strlen(resTable[i].resContent), 0);
+            return  0;
+        }
+    }
+    return -1;
+    
+}
 
 void error_die(const char *msg) {
     perror(msg);
@@ -29,54 +65,45 @@ void error_die(const char *msg) {
 
 
 int startServer(int sockfd) {
-    struct sockaddr_in serveraddr, clientaddr;
+    struct sockaddr_in serveraddr;
+    int serverSock=-1;
     int on=1;
+    
+    
+    serverSock = socket(AF_INET, SOCK_STREAM, 0);
+    if (serverSock < 0 ) {
+        error_die("start server failed!");
+        return -1;
+    }
+    
     memset(&serveraddr, 0, sizeof(struct sockaddr_in));
     
     serveraddr.sin_family        = AF_INET;
     serveraddr.sin_port          = htons(8801);
     serveraddr.sin_addr.s_addr   = inet_addr("10.211.55.4");
 
-    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0)
+    if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
         error_die("setsock failed");
+        return -1;
+    }
     
-    if (bind(sockfd, (struct sockaddr*)&serveraddr, (socklen_t)sizeof(struct sockaddr)) != 0)
+    if (bind(serverSock, (struct sockaddr*)&serveraddr, (socklen_t)sizeof(struct sockaddr)) != 0) {
         error_die("bind failed!");
+        return -1;
+    }
     
-    if (listen(sockfd, 5) != 0)
+    if (listen(serverSock, 5) != 0) {
         error_die("listen failed!");
+        return -1;
+    }
     
-    return 0;
-
-
+    return serverSock;
 }
+
 int isSpace(char c) {
     if (c=='\t' || c=='\n' || c == ' ') return 1;
     return 0;
 
-}
-
-
-void unimplemented(int client)   //问题：send什么时候把用户空间缓存里的数据推到内核缓存? 数据量达到多少？ 为什么客户端输入的话send就直接发送了？
-{
-    char buf[1024];
-    
-    sprintf(buf, "HTTP/1.0 501 Method Not Implemented\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, SERVER_STRING);
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "Content-Type: text/html\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<HTML><HEAD><TITLE>Method Not Implemented\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "</TITLE></HEAD>\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<BODY><P>HTTP request method not supported.\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "</BODY></HTML>\r\n");
-    send(client, buf, strlen(buf), 0);
 }
 
 
@@ -107,64 +134,40 @@ void cat(int client, FILE *resource)
     }
 }
 
-void not_found(int client)
-{
-    char buf[1024];
-    
-    sprintf(buf, "HTTP/1.0 404 NOT FOUND\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, SERVER_STRING);
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "Content-Type: text/html\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<HTML><TITLE>Not Found</TITLE>\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "<BODY><P>The server could not fulfill\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "your request because the resource specified\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "is unavailable or nonexistent.\r\n");
-    send(client, buf, strlen(buf), 0);
-    sprintf(buf, "</BODY></HTML>\r\n");
-    send(client, buf, strlen(buf), 0);
-}
 
-void file_server(int sockfd, char filepath[]) {
+
+void file_server(int client, const char *filepath) {
     FILE *file = NULL;
     file = fopen(filepath, "r");
-    if(file==NULL) not_found(sockfd);
+    if(file==NULL) build_response(501, client);
     else {
-        headers(sockfd, filepath);
-        cat(sockfd, file);
+        headers(client, filepath);
+        cat(client, file);
     }
     fclose(file);
-    
-
 }
 
-void cgi_server(int sockfd, char filepath[]) {
+void cgi_server(int client, const char *filepath) {
     int cgi_pipe[2]={-1,-1};
     int child_pid=-1;
     char buf[MIN_BUFFER_SIZE];
     int status;
     if(access(filepath, 0)) {
-        not_found(sockfd);
+        build_response(404, client);
     } else {
         if (pipe(cgi_pipe)) {  //管道创建失败
-            
+            build_response(500, client);
         }
         
         sprintf(buf, "HTTP/1.0 200 OK\r\n");
-        send(sockfd, buf, strlen(buf), 0);
+        send(client, buf, strlen(buf), 0);
         if ((child_pid=fork()) < 0) {
             //创建子进程失败
         } else if (child_pid > 0) {
             //父进程
             close(cgi_pipe[1]);
             while(read(cgi_pipe[0], buf, MIN_BUFFER_SIZE)) {
-                send(sockfd, buf, sizeof(buf), 0);
+                send(client, buf, sizeof(buf), 0);
             }
             close(cgi_pipe[0]);
             waitpid(child_pid, &status, 0);
@@ -177,54 +180,47 @@ void cgi_server(int sockfd, char filepath[]) {
             dup2(cgi_pipe[1],STDOUT_FILENO);
             sprintf(buf, "QUERY_STRING=%s", filepath);
             putenv(buf);
-	    sleep(10);
             close(cgi_pipe[0]);
-	 //   sprintf(buf, "sh %s > %d ", filepath, cgi_pipe[1]);
-	//    printf("%s", buf);
-            execl(filepath, NULL);
-	//    printf("%s", buf);
+            if (execl(filepath, NULL)<0) {
+                build_response(500, client);
+            }
             exit(0);
         }
-        
-    
-    
     }
-
-
 }
 
-void connProc(int *sockfd) {
+void connProc(int client) {
     char buf[BUFFER_SIZE];
-    int  recvlen = -1;
+    ssize_t  recvlen = -1;
     char method[MIN_BUFFER_SIZE ];
     char url[MIN_BUFFER_SIZE];
-    char path[MIN_BUFFER_SIZE];
     int  i=0,j=0;
     int  cgi=0;
     
-    recvlen = recv(*sockfd, buf, BUFFER_SIZE-1, 0);
+    recvlen = recv(client, buf, BUFFER_SIZE-1, 0);
     if (recvlen > 0) {
         printf("%s", buf);
     }
     
     while(i<recvlen && isSpace(buf[i])) i++;
     if (i == recvlen)
-        unimplemented(*sockfd);
+        build_response(400, client);
     
     while(i<recvlen && j<MIN_BUFFER_SIZE && !isSpace(buf[i])) {
         method[j++] = buf[i++];
     }
     if (j<MIN_BUFFER_SIZE && i<recvlen) method[j]='\0';
     else
-        unimplemented(*sockfd);
+       build_response(400, client);
 
     
     if (strcmp(method, "GET") && strcmp(method, "POST"))
-        unimplemented(*sockfd);
+       build_response(400, client);
     
     if (!strcmp(method, "POST")) cgi=1;
     
     while(i<recvlen && isSpace(buf[i])) i++;
+    
     j=0;
     while(i<recvlen && j<MIN_BUFFER_SIZE && !isSpace(buf[i])) {
         url[j++] = buf[i++];
@@ -234,16 +230,13 @@ void connProc(int *sockfd) {
     cgi=1;
     
     if (!cgi) {
-        file_server(*sockfd, url);
+        file_server(client, url);
     } else {
-        cgi_server(*sockfd, url);
+        cgi_server(client, url);
     }
     
-    close(*sockfd);
-    
-    
-    
-   // printf("%s", "client proc!");
+    close(client);
+  
 
 }
 
@@ -252,18 +245,12 @@ int main(int argc, const char * argv[]) {
     int listensock=0;
     int acceptsock;
     int cliendaddr_len;
-    int pid;
+    pthread_t pid;
     struct sockaddr_in clientaddr;
- 
-    printf("run success\n");
-    
     
     listensock = socket(AF_INET, SOCK_STREAM, 0);
     
-    if (listensock < 0 )
-        error_die("start server failed!");
-
-    if (startServer(listensock) != 0)
+    if (startServer(listensock) < 0)
         error_die("start server failed!");
     
     
@@ -275,9 +262,7 @@ int main(int argc, const char * argv[]) {
             continue;
         }
         
-
-        
-        if (pthread_create(&pid, NULL, &connProc, (void *)&acceptsock) != 0 ) {
+        if (pthread_create(&pid, NULL, (void *)&connProc, (void *)&acceptsock) != 0 ) {
             perror("client conn failed\n");
             close(acceptsock);
             continue;
