@@ -177,8 +177,12 @@ void cgi_server(int sockfd, char filepath[]) {
             dup2(cgi_pipe[1],STDOUT_FILENO);
             sprintf(buf, "QUERY_STRING=%s", filepath);
             putenv(buf);
+	    sleep(10);
             close(cgi_pipe[0]);
+	 //   sprintf(buf, "sh %s > %d ", filepath, cgi_pipe[1]);
+	//    printf("%s", buf);
             execl(filepath, NULL);
+	//    printf("%s", buf);
             exit(0);
         }
         
