@@ -22,7 +22,7 @@
 #define MIN_BUFFER_SIZE     256
 #define SERVER_STRING "Server: jdbhttpd/0.1.0\r\n"
 
-void error_die(const char *);
+void error_die(const char*);
 int build_response(int, int);
 int startServer();
 int isSpace(char);
@@ -30,7 +30,7 @@ void headers(int, const char *);
 void cat(int, FILE *);
 void file_server(int, const char *);
 void cgi_server(int, const char *);
-void connProc(int);
+void connProc(void*);
 
 struct httpResPck {
     int  stateNo;
@@ -80,8 +80,8 @@ int startServer() {
     
     serveraddr.sin_family        = AF_INET;
     serveraddr.sin_port          = htons(8801);
-    serveraddr.sin_addr.s_addr   = inet_addr("10.211.55.4");
-
+ //   serveraddr.sin_addr.s_addr   = inet_addr(INADDR_ANY);
+    serveraddr.sin_addr.s_addr   = htonl(INADDR_ANY);
     if (setsockopt(serverSock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
         error_die("setsock failed");
         return -1;
@@ -189,18 +189,20 @@ void cgi_server(int client, const char *filepath) {
     }
 }
 
-void connProc(int client) {
+void connProc(void *arg) {
     char buf[BUFFER_SIZE];
-    ssize_t  recvlen = -1;
+    ssize_t  recvlen = 0;
     char method[MIN_BUFFER_SIZE ];
     char url[MIN_BUFFER_SIZE];
     int  i=0,j=0;
     int  cgi=0;
+    int client  = *((int*)arg);
     
     recvlen = recv(client, buf, BUFFER_SIZE-1, 0);
-    if (recvlen > 0) {
-        printf("%s", buf);
+    if (recvlen < 0) {
+        build_response(400, client);
     }
+    
     
     while(i<recvlen && isSpace(buf[i])) i++;
     if (i == recvlen)
@@ -227,7 +229,6 @@ void connProc(int client) {
     }
     
     url[j] = '\0';
-    cgi=1;
     
     if (!cgi) {
         file_server(client, url);
