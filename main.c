@@ -21,7 +21,7 @@
 #define BUFFER_SIZE         1024
 #define MIN_BUFFER_SIZE     256
 #define DEFAULT_PORT        8801
-#define SERVER_STRING "Server: jtinywebserver/0.1.0\r\n"
+#define SERVER_STRING "Server: tinywebserver/0.1.0\r\n"
 
 void error_die(const char*);
 int build_response(int, int);
